@@ -1132,6 +1132,8 @@ int bopen(BFILE *bfd, const char *fname, int flags, mode_t mode, dev_t rdev)
    }
    bfd->berrno = errno;
    bfd->m_flags = flags;
+   bfd->fname = fname;
+   bfd->mode  = mode;
    Dmsg1(400, "Open file %d\n", bfd->fid);
    errno = bfd->berrno;
 
@@ -1207,13 +1209,32 @@ int bclose(BFILE *bfd)
 ssize_t bread(BFILE *bfd, void *buf, size_t count)
 {
    ssize_t status;
+   boffset_t pos;
 
    if (bfd->cmd_plugin && plugin_bread) {
       return plugin_bread(bfd, buf, count);
    }
 
+   pos=(boffset_t)lseek(bfd->fid,0,SEEK_CUR);
    status = read(bfd->fid, buf, count);
    bfd->berrno = errno;
+
+   // try to wait a bit here....
+   if (status==-1 && (errno==EIO) && bfd->fname){
+     // close the file internally....
+     bclose(bfd);
+     // wait a bit...
+     sleep(20);
+     // try reopen... 
+     bopen(bfd,bfd->fname,bfd->m_flags,bfd->mode,0);
+     // seek...
+     lseek(bfd->fid,pos,SEEK_SET);
+     // try read again...
+     status = read(bfd->fid, buf, count);
+     // remember error...
+     bfd->berrno = errno;
+   }
+
    return status;
 }
 

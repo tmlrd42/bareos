@@ -1776,6 +1776,13 @@ static bacl_exit_code solaris_build_acl_streams(JCR *jcr,
     * See if filesystem supports acls.
     */
    acl_enabled = pathconf(acl_data->last_fname, _PC_ACL_ENABLED);
+
+   // try it again after a few secs...
+   if (acl_enabled==-1 && (errno==EPERM || errno==EIO)) {
+      sleep(20);
+      acl_enabled = pathconf(acl_data->last_fname, _PC_ACL_ENABLED);
+   }
+
    switch (acl_enabled) {
    case 0:
       /*
@@ -1839,8 +1846,16 @@ static bacl_exit_code solaris_build_acl_streams(JCR *jcr,
 #if defined(ACL_SID_FMT)
    /*
     * New format flag added in newer Solaris versions.
+    *
+    * Note: we must not resolve via idmap for the following reasons:
+    * idmap winnames may contain spaces and utf8 characters that will not be 
+    * recognised correctly by acl_fromtext again. 
+    * The backup only needs to recreate the uid/sid settings in the fs correctly
+    * the mapping is subject to the admin afterwards.
+    * Also: if we skip resolve, we will be able to speed up backup and be not dependent
+    * on ad response times...
     */
-   flags = ACL_APPEND_ID | ACL_COMPACT_FMT | ACL_SID_FMT;
+   flags = ACL_APPEND_ID | ACL_COMPACT_FMT | ACL_SID_FMT | ACL_NORESOLVE;
 #else
    flags = ACL_APPEND_ID | ACL_COMPACT_FMT;
 #endif /* ACL_SID_FMT */
@@ -1948,11 +1963,9 @@ static bacl_exit_code solaris_parse_acl_streams(JCR *jcr,
       }
 
       if ((error = acl_fromtext(content, &aclp)) != 0) {
-         Mmsg2(jcr->errmsg,
-               _("acl_fromtext error on file \"%s\": ERR=%s\n"),
-               acl_data->last_fname, acl_strerror(error));
-         Dmsg3(100, "acl_fromtext error acl=%s file=%s ERR=%s\n",
-               content, acl_data->last_fname, acl_strerror(error));
+         Mmsg2(jcr->errmsg, _("acl_fromtext error on file \"%s\": ERR=%s\n"), acl_data->last_fname, acl_strerror(error));
+         Mmsg3(jcr->errmsg, "acl_fromtext error acl=%s file=%s ERR=%s\n", content, acl_data->last_fname, acl_strerror(error));
+         Dmsg3(100, "acl_fromtext error acl=%s file=%s ERR=%s\n", content, acl_data->last_fname, acl_strerror(error));
          return bacl_exit_error;
       }
 

@@ -114,6 +114,8 @@ struct BFILE {
    int use_backup_decomp;             /**< set if using BackupRead Stream Decomposition */
    bool reparse_point;                /**< not used in Unix */
    bool cmd_plugin;                   /**< set if we have a command plugin */
+   const char *fname;                 /** saved for error recovery */
+   int         mode;                  /** saved for error recovery */
 };
 
 #endif
