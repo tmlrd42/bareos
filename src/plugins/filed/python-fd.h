@@ -26,6 +26,8 @@
 #ifndef BPYTHONFD_H
 #define BPYTHONFD_H 1
 
+#undef T_STRING
+
 #include "structmember.h"
 
 /**
